@@ -1,9 +1,11 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from google import genai
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.staticfiles import StaticFiles
 
 from app.core.errors import install_error_handlers
 from app.core.settings import get_settings
@@ -52,3 +54,7 @@ app.include_router(health_router, prefix="/api")
 app.include_router(stt_router, prefix="/api")
 app.include_router(transcriptions_router, prefix="/api")
 install_error_handlers(app)
+
+frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+if frontend_dist.is_dir():
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
