@@ -1,4 +1,5 @@
 import type { components } from './schema'
+import { uiConfig } from '../config/ui'
 
 export type LanguageMode =
   components['schemas']['TranscriptionCreate']['language_mode']
@@ -43,9 +44,9 @@ async function getErrorMessage(response: Response): Promise<string> {
       return body.error.message
     }
   } catch {
-    return `Request failed (${response.status}).`
+    return uiConfig.errors.requestFailed(response.status)
   }
-  return `Request failed (${response.status}).`
+  return uiConfig.errors.requestFailed(response.status)
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {

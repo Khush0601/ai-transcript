@@ -15,39 +15,42 @@ import {
   type TranscriptionListResponse,
   type TranscriptionUpdate,
 } from '../../api/client'
+import { uiConfig } from '../../config/ui'
 import './history.css'
 
-const PAGE_SIZE = 10
-const SEARCH_DELAY_MS = 250
 const LIST_QUERY_KEY = ['transcriptions', 'list'] as const
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-})
+const dateFormatter = new Intl.DateTimeFormat(
+  undefined,
+  uiConfig.history.dateFormat,
+)
 
 function messageFromError(error: unknown): string {
   return error instanceof Error
     ? error.message
-    : 'Something went wrong. Please try again.'
+    : uiConfig.history.messages.genericError
 }
 
 function formatDate(value: string): string {
   const date = new Date(value)
   return Number.isNaN(date.getTime())
-    ? 'Date unavailable'
+    ? uiConfig.history.messages.dateUnavailable
     : dateFormatter.format(date)
 }
 
 function formatDuration(milliseconds: number): string {
   const seconds = Math.floor(milliseconds / 1000)
   const minutes = Math.floor(seconds / 60)
-  return minutes > 0 ? `${minutes}m ${seconds % 60}s` : `${seconds}s`
+  return minutes > 0
+    ? `${minutes}${uiConfig.history.duration.minuteSuffix} ${seconds % 60}${uiConfig.history.duration.secondSuffix}`
+    : `${seconds}${uiConfig.history.duration.secondSuffix}`
 }
 
 function excerpt(content: string): string {
   const normalized = content.replace(/\s+/g, ' ').trim()
-  return normalized.length > 120 ? `${normalized.slice(0, 120)}...` : normalized
+  return normalized.length > uiConfig.history.excerptMaxLength
+    ? `${normalized.slice(0, uiConfig.history.excerptMaxLength)}${uiConfig.history.excerptSuffix}`
+    : normalized
 }
 
 interface TranscriptionHistoryProps {
@@ -73,8 +76,16 @@ export function TranscriptionHistory({
   const [copyMessage, setCopyMessage] = useState<string | null>(null)
 
   const listQuery = useQuery({
-    queryKey: [...LIST_QUERY_KEY, { search, page, limit: PAGE_SIZE }],
-    queryFn: () => listTranscriptions({ search, page, limit: PAGE_SIZE }),
+    queryKey: [
+      ...LIST_QUERY_KEY,
+      { search, page, limit: uiConfig.history.pageSize },
+    ],
+    queryFn: () =>
+      listTranscriptions({
+        search,
+        page,
+        limit: uiConfig.history.pageSize,
+      }),
     enabled: active,
     placeholderData: keepPreviousData,
   })
@@ -83,7 +94,7 @@ export function TranscriptionHistory({
     queryKey: ['transcription', selectedId],
     queryFn: () => {
       if (selectedId === null) {
-        throw new Error('Select a transcript before requesting its details.')
+        throw new Error(uiConfig.history.messages.selectBeforeDetails)
       }
       return getTranscription(selectedId)
     },
@@ -106,7 +117,7 @@ export function TranscriptionHistory({
     onSuccess: (_, id) => {
       const currentPage = queryClient.getQueryData<TranscriptionListResponse>([
         ...LIST_QUERY_KEY,
-        { search, page, limit: PAGE_SIZE },
+        { search, page, limit: uiConfig.history.pageSize },
       ])
       queryClient.removeQueries({ queryKey: ['transcription', id] })
       setSelectedId(null)
@@ -122,7 +133,7 @@ export function TranscriptionHistory({
     const timeoutId = window.setTimeout(() => {
       setSearch(searchInput.trim())
       setPage(1)
-    }, SEARCH_DELAY_MS)
+    }, uiConfig.history.searchDelayMs)
     return () => window.clearTimeout(timeoutId)
   }, [searchInput])
 
@@ -138,7 +149,10 @@ export function TranscriptionHistory({
       transcription !== undefined &&
       (editTitle !== transcription.title ||
         editContent !== transcription.content)
-    return !hasChanges || window.confirm('Discard your unsaved changes?')
+    return (
+      !hasChanges ||
+      window.confirm(uiConfig.history.messages.discardUnsavedChanges)
+    )
   }
 
   function selectTranscription(item: TranscriptionResponse): void {
@@ -163,7 +177,7 @@ export function TranscriptionHistory({
     if (!transcription) return
     const title = editTitle.trim()
     if (!title) {
-      setEditValidationError('A title is required.')
+      setEditValidationError(uiConfig.history.messages.titleRequired)
       return
     }
 
@@ -183,7 +197,7 @@ export function TranscriptionHistory({
   function confirmDelete(): void {
     if (!transcription) return
     const confirmed = window.confirm(
-      `Delete "${transcription.title}"? This cannot be undone.`,
+      uiConfig.history.messages.deleteConfirmation(transcription.title),
     )
     if (!confirmed) return
     deleteMutation.reset()
@@ -194,14 +208,12 @@ export function TranscriptionHistory({
     if (!transcription) return
     try {
       if (!navigator.clipboard?.writeText) {
-        throw new Error('Clipboard access is unavailable in this browser.')
+        throw new Error(uiConfig.history.messages.clipboardUnavailable)
       }
       await navigator.clipboard.writeText(transcription.content)
-      setCopyMessage('Transcript copied.')
+      setCopyMessage(uiConfig.history.messages.copied)
     } catch {
-      setCopyMessage(
-        'Could not copy the transcript. Check clipboard permissions and try again.',
-      )
+      setCopyMessage(uiConfig.history.messages.copyFailed)
     }
   }
 
@@ -221,28 +233,32 @@ export function TranscriptionHistory({
     <section className="history-view" aria-labelledby="history-heading">
       <header className="history-header">
         <div>
-          <p className="eyebrow">YOUR LIBRARY</p>
-          <h1 id="history-heading">Transcription history</h1>
-          <p>Find, review, and edit transcripts saved in this browser.</p>
+          <p className="eyebrow">{uiConfig.history.labels.eyebrow}</p>
+          <h1 id="history-heading">{uiConfig.history.labels.heading}</h1>
+          <p>{uiConfig.history.labels.description}</p>
         </div>
         <button
           className="history-new-button"
           type="button"
           onClick={startRecording}
         >
-          <span aria-hidden="true">+</span>
-          New recording
+          <span aria-hidden="true">
+            {uiConfig.history.emptyStateIcons.newRecording}
+          </span>
+          {uiConfig.history.labels.newRecording}
         </button>
       </header>
 
       <label className="history-search">
         <span className="search-icon" aria-hidden="true" />
-        <span className="visually-hidden">Search transcriptions</span>
+        <span className="visually-hidden">
+          {uiConfig.history.labels.search}
+        </span>
         <input
           type="search"
           value={searchInput}
-          maxLength={200}
-          placeholder="Search titles and transcript text..."
+          maxLength={uiConfig.history.maxSearchLength}
+          placeholder={uiConfig.history.labels.searchPlaceholder}
           onChange={(event) => {
             if (!canLeaveEdit()) return
             setSearchInput(event.currentTarget.value)
@@ -255,19 +271,20 @@ export function TranscriptionHistory({
           <button
             type="button"
             className="search-clear"
-            aria-label="Clear search"
+            aria-label={uiConfig.history.labels.clearSearch}
             onClick={() => setSearchInput('')}
           >
-            Clear
+            {uiConfig.history.labels.clearSearchButton}
           </button>
         )}
       </label>
 
       {listQuery.error && data && (
         <div className="history-notice history-error" role="alert">
-          Could not refresh the list: {messageFromError(listQuery.error)}
+          {uiConfig.history.messages.refreshFailed}{' '}
+          {messageFromError(listQuery.error)}
           <button type="button" onClick={() => void listQuery.refetch()}>
-            Retry
+            {uiConfig.history.labels.tryAgain}
           </button>
         </div>
       )}
@@ -275,13 +292,17 @@ export function TranscriptionHistory({
       <div className="history-layout" aria-busy={listQuery.isFetching}>
         <section
           className="history-list-panel"
-          aria-label="Saved transcriptions"
+          aria-label={uiConfig.history.labels.savedTranscriptions}
         >
           <div className="history-list-heading">
-            <h2>{search ? 'Search results' : 'All transcripts'}</h2>
+            <h2>
+              {search
+                ? uiConfig.history.labels.searchResults
+                : uiConfig.history.labels.allTranscripts}
+            </h2>
             <span>
               {listQuery.isFetching && data
-                ? 'Updating...'
+                ? uiConfig.history.labels.updating
                 : data
                   ? data.total
                   : ''}
@@ -291,14 +312,14 @@ export function TranscriptionHistory({
           {listQuery.isPending && active ? (
             <div className="history-loading" role="status">
               <span className="loading-spinner" aria-hidden="true" />
-              Loading transcripts...
+              {uiConfig.history.labels.loadingList}
             </div>
           ) : listQuery.error && !data ? (
             <div className="history-state history-state-error" role="alert">
-              <strong>Could not load your history</strong>
+              <strong>{uiConfig.history.labels.couldNotLoadHistory}</strong>
               <p>{messageFromError(listQuery.error)}</p>
               <button type="button" onClick={() => void listQuery.refetch()}>
-                Try again
+                {uiConfig.history.labels.tryAgain}
               </button>
             </div>
           ) : data?.items.length ? (
@@ -316,7 +337,8 @@ export function TranscriptionHistory({
                 >
                   <span className="history-item-title">{item.title}</span>
                   <span className="history-item-excerpt">
-                    {excerpt(item.content) || 'No transcript text'}
+                    {excerpt(item.content) ||
+                      uiConfig.history.labels.noTranscriptText}
                   </span>
                   <span className="history-item-meta">
                     <span>{formatDate(item.created_at)}</span>
@@ -328,15 +350,19 @@ export function TranscriptionHistory({
           ) : (
             <div className="history-state">
               <span className="history-empty-mark" aria-hidden="true">
-                {search ? '⌕' : '◷'}
+                {search
+                  ? uiConfig.history.emptyStateIcons.search
+                  : uiConfig.history.emptyStateIcons.history}
               </span>
               <strong>
-                {search ? 'No matching transcripts' : 'Your history is empty'}
+                {search
+                  ? uiConfig.history.labels.noMatchingTranscripts
+                  : uiConfig.history.labels.emptyHistory}
               </strong>
               <p>
                 {search
-                  ? 'Try another search term or clear your search.'
-                  : 'When you stop a recording, the saved transcript will appear here.'}
+                  ? uiConfig.history.labels.emptySearchDescription
+                  : uiConfig.history.labels.emptyHistoryDescription}
               </p>
               {!search && (
                 <button
@@ -344,7 +370,7 @@ export function TranscriptionHistory({
                   className="history-inline-action"
                   onClick={startRecording}
                 >
-                  Start a recording
+                  {uiConfig.history.labels.startRecording}
                 </button>
               )}
             </div>
@@ -353,12 +379,16 @@ export function TranscriptionHistory({
           {data && data.total > 0 && (
             <footer className="history-pagination">
               <span>
-                {firstResult}-{lastResult} of {data.total}
+                {uiConfig.history.messages.resultRange(
+                  firstResult,
+                  lastResult,
+                  data.total,
+                )}
               </span>
               <div>
                 <button
                   type="button"
-                  aria-label="Previous page"
+                  aria-label={uiConfig.history.labels.previousPage}
                   disabled={
                     page <= 1 ||
                     listQuery.isFetching ||
@@ -367,14 +397,14 @@ export function TranscriptionHistory({
                   }
                   onClick={() => moveToPage(page - 1)}
                 >
-                  Previous
+                  {uiConfig.history.labels.previous}
                 </button>
                 <span>
                   {data.page} / {totalPages}
                 </span>
                 <button
                   type="button"
-                  aria-label="Next page"
+                  aria-label={uiConfig.history.labels.nextPage}
                   disabled={
                     page >= totalPages ||
                     listQuery.isFetching ||
@@ -383,7 +413,7 @@ export function TranscriptionHistory({
                   }
                   onClick={() => moveToPage(page + 1)}
                 >
-                  Next
+                  {uiConfig.history.labels.next}
                 </button>
               </div>
             </footer>
@@ -392,32 +422,38 @@ export function TranscriptionHistory({
 
         <section
           className="history-detail-panel"
-          aria-label="Transcript details"
+          aria-label={uiConfig.history.labels.transcriptDetails}
         >
           {!selectedId ? (
             <div className="history-detail-empty">
-              <span aria-hidden="true">↖</span>
-              <strong>Select a transcript</strong>
-              <p>Choose an item from your history to view or edit it.</p>
+              <span aria-hidden="true">
+                {uiConfig.history.emptyStateIcons.detail}
+              </span>
+              <strong>{uiConfig.history.labels.selectTranscript}</strong>
+              <p>{uiConfig.history.labels.selectTranscriptDescription}</p>
             </div>
           ) : detailQuery.isPending ? (
             <div className="history-loading" role="status">
               <span className="loading-spinner" aria-hidden="true" />
-              Loading transcript...
+              {uiConfig.history.labels.loadingTranscript}
             </div>
           ) : detailQuery.error ? (
             <div className="history-state history-state-error" role="alert">
-              <strong>Could not load this transcript</strong>
+              <strong>
+                {uiConfig.history.messages.couldNotLoadTranscript}
+              </strong>
               <p>{messageFromError(detailQuery.error)}</p>
               <button type="button" onClick={() => void detailQuery.refetch()}>
-                Try again
+                {uiConfig.history.labels.tryAgain}
               </button>
             </div>
           ) : transcription ? (
             <>
               <div className="detail-topline">
                 <div>
-                  <p className="eyebrow">TRANSCRIPT</p>
+                  <p className="eyebrow">
+                    {uiConfig.history.labels.transcriptEyebrow}
+                  </p>
                   <span className="detail-date">
                     {formatDate(transcription.created_at)}
                   </span>
@@ -428,8 +464,8 @@ export function TranscriptionHistory({
                       <button
                         type="button"
                         className="detail-icon-button"
-                        aria-label="Copy transcript"
-                        title="Copy transcript"
+                        aria-label={uiConfig.history.labels.copyTranscript}
+                        title={uiConfig.history.labels.copyTranscript}
                         disabled={!transcription.content}
                         onClick={() => void copyTranscript()}
                       >
@@ -441,8 +477,8 @@ export function TranscriptionHistory({
                       <button
                         type="button"
                         className="detail-icon-button"
-                        aria-label="Edit transcript"
-                        title="Edit transcript"
+                        aria-label={uiConfig.history.labels.editTranscript}
+                        title={uiConfig.history.labels.editTranscript}
                         onClick={() => beginEditing(transcription)}
                       >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -452,8 +488,8 @@ export function TranscriptionHistory({
                       <button
                         type="button"
                         className="detail-icon-button detail-delete-button"
-                        aria-label="Delete transcript"
-                        title="Delete transcript"
+                        aria-label={uiConfig.history.labels.deleteTranscript}
+                        title={uiConfig.history.labels.deleteTranscript}
                         disabled={deleteMutation.isPending}
                         onClick={confirmDelete}
                       >
@@ -469,11 +505,11 @@ export function TranscriptionHistory({
               {isEditing ? (
                 <div className="transcript-edit-form">
                   <label>
-                    <span>Title</span>
+                    <span>{uiConfig.history.labels.title}</span>
                     <input
                       type="text"
                       value={editTitle}
-                      maxLength={200}
+                      maxLength={uiConfig.history.maxTitleLength}
                       onChange={(event) => {
                         setEditTitle(event.currentTarget.value)
                         setEditValidationError(null)
@@ -481,18 +517,21 @@ export function TranscriptionHistory({
                     />
                   </label>
                   <label>
-                    <span>Transcript</span>
+                    <span>{uiConfig.history.labels.transcript}</span>
                     <textarea
                       value={editContent}
-                      maxLength={100_000}
-                      rows={12}
+                      maxLength={uiConfig.history.maxTranscriptLength}
+                      rows={uiConfig.history.transcriptEditorRows}
                       onChange={(event) =>
                         setEditContent(event.currentTarget.value)
                       }
                     />
                   </label>
                   <div className="edit-character-count">
-                    {editContent.length.toLocaleString()} / 100,000 characters
+                    {uiConfig.history.messages.characterCount(
+                      editContent.length.toLocaleString(),
+                      uiConfig.history.maxTranscriptLength,
+                    )}
                   </div>
                   {editValidationError && (
                     <p className="detail-error" role="alert">
@@ -501,7 +540,7 @@ export function TranscriptionHistory({
                   )}
                   {updateMutation.error && (
                     <p className="detail-error" role="alert">
-                      Could not save changes:{' '}
+                      {uiConfig.history.messages.saveFailed}{' '}
                       {messageFromError(updateMutation.error)}
                     </p>
                   )}
@@ -512,7 +551,9 @@ export function TranscriptionHistory({
                       disabled={updateMutation.isPending}
                       onClick={saveEdit}
                     >
-                      {updateMutation.isPending ? 'Saving...' : 'Save changes'}
+                      {updateMutation.isPending
+                        ? uiConfig.history.labels.saving
+                        : uiConfig.history.labels.saveChanges}
                     </button>
                     <button
                       type="button"
@@ -520,7 +561,7 @@ export function TranscriptionHistory({
                       disabled={updateMutation.isPending}
                       onClick={discardEdit}
                     >
-                      Cancel
+                      {uiConfig.history.labels.cancel}
                     </button>
                   </div>
                 </div>
@@ -529,21 +570,23 @@ export function TranscriptionHistory({
                   <h2 className="detail-title">{transcription.title}</h2>
                   <div className="detail-metadata">
                     <span>
-                      {transcription.language_mode === 'auto'
-                        ? 'Auto detect'
-                        : 'Hindi + English'}
+                      {transcription.language_mode ===
+                      uiConfig.recorder.languages.auto.value
+                        ? uiConfig.history.languageLabels.auto
+                        : uiConfig.history.languageLabels.hindi_english}
                     </span>
                     <span>
-                      {transcription.provider === 'gemini'
-                        ? 'Gemini Live'
-                        : 'Self-hosted'}
+                      {transcription.provider ===
+                      uiConfig.providers.gemini.value
+                        ? uiConfig.providers.gemini.label
+                        : uiConfig.providers.self_hosted.label}
                     </span>
                     <span>{formatDuration(transcription.duration_ms)}</span>
                   </div>
                   <div className="detail-transcript">
                     {transcription.content || (
                       <span className="detail-no-content">
-                        This transcript has no text.
+                        {uiConfig.history.labels.transcriptNoText}
                       </span>
                     )}
                   </div>
@@ -554,7 +597,7 @@ export function TranscriptionHistory({
                   )}
                   {deleteMutation.error && (
                     <p className="detail-error" role="alert">
-                      Could not delete this transcript:{' '}
+                      {uiConfig.history.messages.couldNotDeleteTranscript}{' '}
                       {messageFromError(deleteMutation.error)}
                     </p>
                   )}

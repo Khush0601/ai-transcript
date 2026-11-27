@@ -8,12 +8,10 @@ import {
 import { requestSttToken } from '../api/client'
 import { pcm16ToBase64 } from '../audio/pcm'
 import type { LanguageMode } from '../api/client'
+import { uiConfig } from '../config/ui'
 import type { ProviderState, TranscriptionProvider } from './types'
 
 type LiveSession = Awaited<ReturnType<GoogleGenAI['live']['connect']>>
-
-const FINAL_SEGMENT_TIMEOUT_MS = 4_000
-const FINAL_SEGMENT_QUIET_MS = 300
 
 export class GeminiProvider implements TranscriptionProvider {
   onInterim: (text: string) => void = () => undefined
@@ -31,15 +29,16 @@ export class GeminiProvider implements TranscriptionProvider {
       const tokenResponse = await requestSttToken(languageMode)
       const ai = new GoogleGenAI({
         apiKey: tokenResponse.token,
-        httpOptions: { apiVersion: 'v1beta' },
+        httpOptions: { apiVersion: uiConfig.live.apiVersion },
       })
       this.session = await ai.live.connect({
         model: tokenResponse.model,
         config: {
           responseModalities: [Modality.TEXT],
           inputAudioTranscription: {
-            languageCodes:
-              languageMode === 'hindi_english' ? ['hi-IN', 'en-IN'] : [],
+            languageCodes: [
+              ...uiConfig.recorder.languages[languageMode].languageCodes,
+            ],
             mode: AudioTranscriptionConfigMode.VERBATIM,
           },
         },
@@ -48,7 +47,7 @@ export class GeminiProvider implements TranscriptionProvider {
           onmessage: (message) => this.handleMessage(message),
           onerror: (event) => {
             const error = new Error(
-              event.message || 'The transcription connection failed.',
+              event.message || uiConfig.errors.transcriptionConnectionFailed,
             )
             this.setState('error')
             this.onError(error)
@@ -56,9 +55,7 @@ export class GeminiProvider implements TranscriptionProvider {
           onclose: () => {
             if (!this.stopping) {
               this.setState('error')
-              this.onError(
-                new Error('The transcription connection was interrupted.'),
-              )
+              this.onError(new Error(uiConfig.errors.transcriptionInterrupted))
             }
           },
         },
@@ -69,7 +66,7 @@ export class GeminiProvider implements TranscriptionProvider {
       const normalizedError =
         error instanceof Error
           ? error
-          : new Error('Could not start transcription.')
+          : new Error(uiConfig.errors.transcriptionStartFailed)
       this.onError(normalizedError)
       throw normalizedError
     }
@@ -77,12 +74,12 @@ export class GeminiProvider implements TranscriptionProvider {
 
   sendAudioChunk(samples: Int16Array): void {
     if (!this.session || this.stopping) {
-      throw new Error('The transcription session is not ready for audio.')
+      throw new Error(uiConfig.errors.transcriptionSessionNotReady)
     }
     this.session.sendRealtimeInput({
       audio: {
         data: pcm16ToBase64(samples),
-        mimeType: 'audio/pcm;rate=16000',
+        mimeType: uiConfig.audio.mimeType,
       },
     })
   }
@@ -99,7 +96,7 @@ export class GeminiProvider implements TranscriptionProvider {
     const finalReceived = new Promise<boolean>((resolve) => {
       timeoutId = window.setTimeout(
         () => resolve(sawFinal),
-        FINAL_SEGMENT_TIMEOUT_MS,
+        uiConfig.recorder.finalSegmentTimeoutMs,
       )
       this.resolveFinal = () => {
         sawFinal = true
@@ -108,7 +105,7 @@ export class GeminiProvider implements TranscriptionProvider {
         }
         quietTimeoutId = window.setTimeout(
           () => resolve(true),
-          FINAL_SEGMENT_QUIET_MS,
+          uiConfig.recorder.finalSegmentQuietMs,
         )
       }
     })
