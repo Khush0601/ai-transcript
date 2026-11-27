@@ -16,22 +16,25 @@ from app.schemas.transcription import (
     TranscriptionUpdate,
 )
 from app.services import transcriptions as service
+from app.services.rate_limits import enforce_rate_limit
 
 router = APIRouter(prefix="/transcriptions", tags=["transcriptions"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 ClientIdentity = Annotated[UUID, Depends(get_client_id)]
+RateLimitCheck = Annotated[None, Depends(enforce_rate_limit)]
 
 
 @router.post(
     "",
     response_model=TranscriptionResponse,
     status_code=status.HTTP_201_CREATED,
-    responses={422: {"model": ErrorResponse}},
+    responses={422: {"model": ErrorResponse}, 429: {"model": ErrorResponse}},
 )
 async def create_transcription(
     data: TranscriptionCreate,
     session: DatabaseSession,
     client_id: ClientIdentity,
+    _rate_limit: RateLimitCheck,
 ) -> Transcription:
     return await service.create_transcription(
         session,
@@ -82,13 +85,18 @@ async def read_transcription(
 @router.patch(
     "/{transcription_id}",
     response_model=TranscriptionResponse,
-    responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
+    },
 )
 async def patch_transcription(
     transcription_id: UUID,
     data: TranscriptionUpdate,
     session: DatabaseSession,
     client_id: ClientIdentity,
+    _rate_limit: RateLimitCheck,
 ) -> Transcription:
     return await service.update_transcription(
         session,
@@ -101,12 +109,17 @@ async def patch_transcription(
 @router.delete(
     "/{transcription_id}",
     response_model=TranscriptionDeleteResponse,
-    responses={404: {"model": ErrorResponse}, 422: {"model": ErrorResponse}},
+    responses={
+        404: {"model": ErrorResponse},
+        422: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
+    },
 )
 async def remove_transcription(
     transcription_id: UUID,
     session: DatabaseSession,
     client_id: ClientIdentity,
+    _rate_limit: RateLimitCheck,
 ) -> TranscriptionDeleteResponse:
     await service.delete_transcription(
         session,

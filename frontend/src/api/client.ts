@@ -1,5 +1,6 @@
 import type { components } from './schema'
 import { uiConfig } from '../config/ui'
+import { publishRateLimitStatus, type RateLimitStatus } from './rate-limit'
 
 export type LanguageMode =
   components['schemas']['TranscriptionCreate']['language_mode']
@@ -50,10 +51,48 @@ async function getErrorMessage(response: Response): Promise<string> {
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
+  publishRateLimitHeaders(response)
   if (!response.ok) {
     throw new ApiRequestError(await getErrorMessage(response), response.status)
   }
   return (await response.json()) as T
+}
+
+function publishRateLimitHeaders(response: Response): void {
+  const limitHeader = response.headers.get('x-ratelimit-limit')
+  const remainingHeader = response.headers.get('x-ratelimit-remaining')
+  const resetHeader = response.headers.get('x-ratelimit-reset')
+  if (
+    limitHeader === null ||
+    remainingHeader === null ||
+    resetHeader === null
+  ) {
+    return
+  }
+  const limit = Number(limitHeader)
+  const remaining = Number(remainingHeader)
+  const reset = Number(resetHeader)
+  if (
+    !Number.isInteger(limit) ||
+    !Number.isInteger(remaining) ||
+    !Number.isFinite(reset)
+  ) {
+    return
+  }
+  publishRateLimitStatus({
+    limit,
+    remaining,
+    resets_at: reset > 0 ? new Date(reset * 1000).toISOString() : null,
+  })
+}
+
+export async function getRateLimitStatus(): Promise<RateLimitStatus> {
+  const response = await fetch('/api/rate-limit', {
+    credentials: 'same-origin',
+  })
+  const status = await parseResponse<RateLimitStatus>(response)
+  publishRateLimitStatus(status)
+  return status
 }
 
 export async function requestSttToken(
