@@ -1,68 +1,155 @@
 # Speech to Text
 
-A monorepo for a real-time speech-to-text web app. The assignment mentions
-“Text to Speech” once, but the rest of the requirements describe transcription;
-Text to Speech is intentionally out of scope.
+A monorepo for a real-time speech-to-text web app. Users can dictate in Hindi,
+English, or a mix of the two, then review and manage their saved transcripts.
+Text to Speech is intentionally out of scope: it appears once in the assignment,
+while the rest of the requirements describe speech recognition.
+
+For hosted setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+## Features
+
+- Live microphone transcription with interim and final text.
+- Automatic language detection or a Hindi + English mode.
+- Save, search, paginate, edit, copy, and delete transcript history.
+- Anonymous browser sessions; each visitor's records are scoped to a
+  server-issued cookie.
+- Raw audio is streamed to Gemini Live and is not stored by this application.
+- A local browser recovery draft helps recover transcript text if saving fails.
+
+## Architecture
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant API as FastAPI
+    participant Gemini as Gemini Live
+    participant DB as PostgreSQL
+    Browser->>API: Request short-lived STT token
+    API->>Gemini: Create constrained ephemeral token
+    API-->>Browser: Return token
+    Browser->>Gemini: Stream 16 kHz mono PCM audio
+    Gemini-->>Browser: Interim and final transcript text
+    Browser->>API: Save finalized transcript
+    API->>DB: Store transcript for anonymous client
+    API-->>Browser: Return saved transcript
+```
+
+The browser captures and resamples microphone audio through an AudioWorklet.
+It sends mono, 16 kHz PCM16 audio directly to Gemini Live using a short-lived
+token issued by FastAPI. The Gemini API key stays on the server. UI components
+depend on the `TranscriptionProvider` interface rather than a vendor SDK.
+
+FastAPI routes delegate to services and repositories. SQLAlchemy 2 async handles
+PostgreSQL access; Alembic manages schema migrations. FastAPI serves the built
+React app and `/api` from the same origin when deployed.
+
+The default model is `gemini-3.5-transcribe-live`, a dedicated transcription
+model selected for this speech-recognition app. The browser only receives a
+constrained ephemeral token. Each recording is capped at 10 minutes.
+
+## Project layout
+
+```text
+backend/
+  app/
+    core/          Settings, anonymous identity, error handling
+    db/            SQLAlchemy base and async session
+    models/        SQLAlchemy ORM models
+    repositories/  Database access
+    routers/       FastAPI endpoints
+    schemas/       Pydantic request and response models
+    services/      Business logic and Gemini token creation
+  alembic/         Database migrations
+  tests/           Backend tests
+frontend/
+  src/
+    config/        Shared UI copy, labels, and presentation settings
+    features/      Recorder and transcription-history components
+    providers/     Speech-provider interface and Gemini implementation
+    api/           API client and generated OpenAPI types
+    audio/         Microphone capture and PCM conversion
+  public/          Static assets, including the PCM AudioWorklet
+```
 
 ## Local development
 
-Requirements: Python 3.12+, `uv`, Node.js, npm, and Docker Compose.
+### Requirements
 
-1. Copy `.env.example` to `.env`. The included secret is for local development
-   only. Set `GEMINI_API_KEY` to enable live recording.
-2. Start the local database:
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
+- Node.js and npm
+- Docker Compose
+- A Gemini API key to use live recording
+
+### Setup
+
+1. From the repository root, copy the example environment file:
+
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+   The example key is for local development only. Set `GEMINI_API_KEY` in
+   `.env` to enable recording. Never commit `.env` or put the Gemini key in
+   frontend configuration.
+
+2. Start PostgreSQL:
 
    ```powershell
    docker compose up -d db
    ```
 
-   The Compose database is published on port `5435` to avoid colliding with a
-   PostgreSQL server already running on the default port.
-   If `.env` already exists, update its `DATABASE_URL` to use port `5435`;
-   keep any private keys in that file local.
+   Docker Compose publishes PostgreSQL on port `5435`. The local
+   `DATABASE_URL` in `.env.example` already uses that port.
 
-3. Apply the migration and start the backend from `backend/`:
+3. In a terminal, install backend dependencies, apply migrations, and start
+   FastAPI:
 
    ```powershell
+   Set-Location backend
    uv sync
    uv run alembic upgrade head
    uv run uvicorn app.main:app --reload
    ```
 
-4. Start the frontend from `frontend/`:
+   The API is available at `http://localhost:8000`; its health endpoint is
+   `http://localhost:8000/api/health`.
+
+4. In a second terminal, install frontend dependencies and start Vite:
 
    ```powershell
+   Set-Location frontend
    npm ci
    npm run dev
    ```
 
-The Vite development server proxies `/api` to FastAPI on port 8000.
+   Open the Vite URL shown in the terminal (normally
+   `http://localhost:5173`). Vite proxies `/api` requests to FastAPI on port
+   `8000`.
 
-The API provides health and anonymous-cookie-scoped transcription CRUD, search,
-and pagination. The recorder requests a single-use, short-lived token from
-FastAPI; the Gemini API key remains server-side. The browser streams mono,
-16 kHz PCM audio to Gemini Live and saves finalized transcript text through the
-API. Audio is not stored. A local recovery draft is kept in browser storage
-until the transcript is saved or discarded. Each recording stops at 10 minutes.
+Microphone access requires HTTPS in hosted environments; localhost is allowed
+for development by the browser.
 
-Generate frontend API types while FastAPI is running:
+## Tests and checks
 
-```powershell
-Set-Location frontend
-npm run generate:api
-```
-
-To run backend tests, create a separate test database once:
+Backend tests use a separate PostgreSQL database whose name must end in
+`_test`. With the local Compose database running, create it once:
 
 ```powershell
 docker compose exec db createdb -U speech speech_test
-Set-Location backend
-uv run pytest
 ```
 
-Tests refuse to run unless their database name ends in `_test`.
+Then run backend tests and checks from `backend/`:
 
-Run the frontend unit tests and checks from `frontend/`:
+```powershell
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy app
+```
+
+Run frontend tests and checks from `frontend/`:
 
 ```powershell
 npm test
@@ -71,45 +158,34 @@ npm run lint
 npm run build
 ```
 
+Generate TypeScript API types from FastAPI's OpenAPI schema while the backend
+is running:
+
+```powershell
+Set-Location frontend
+npm run generate:api
+```
+
 ## Environment variables
 
-| Variable | Purpose |
-| --- | --- |
-| `ENVIRONMENT` | Runtime environment (`development`, `test`, or `production`). |
-| `APP_SECRET_KEY` | Server-side signing key; use a strong private value outside local development. |
-| `DATABASE_URL` | SQLAlchemy async PostgreSQL URL (`postgresql+asyncpg`). |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Local Compose database settings. |
-| `GEMINI_API_KEY` | Server-only Gemini API key required for live recording; never expose it to frontend code. |
-| `GEMINI_LIVE_MODEL` | Live transcription model; defaults to `gemini-3.5-transcribe-live`. |
+| Variable            | Purpose                                                                                      |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `ENVIRONMENT`       | `development`, `test`, or `production`.                                                      |
+| `APP_SECRET_KEY`    | Server-side signing key; use a private, strong value outside local development.              |
+| `DATABASE_URL`      | PostgreSQL connection URL. Locally it uses asyncpg; Neon URLs are normalized by the backend. |
+| `POSTGRES_USER`     | Local Docker Compose PostgreSQL username.                                                    |
+| `POSTGRES_PASSWORD` | Local Docker Compose PostgreSQL password.                                                    |
+| `POSTGRES_DB`       | Local Docker Compose database name.                                                          |
+| `GEMINI_API_KEY`    | Server-only Gemini API key required for live recording.                                      |
+| `GEMINI_LIVE_MODEL` | Live transcription model; defaults to `gemini-3.5-transcribe-live`.                          |
 
-## Architecture
+## Trade-offs and limitations
 
-The app uses React, TypeScript, Vite, and TanStack Query; FastAPI, Pydantic v2,
-SQLAlchemy async, and Alembic; and PostgreSQL. Browser audio is captured through
-an AudioWorklet, resampled to mono 16 kHz PCM16, then streamed to the Gemini
-Live API using a short-lived, server-issued ephemeral token. UI components
-depend on the `TranscriptionProvider` interface rather than a vendor SDK.
-FastAPI stores transcript text and metadata scoped to an anonymous,
-server-issued cookie identity. Raw audio is not stored.
-
-The default model is `gemini-3.5-transcribe-live`, Google's dedicated Live
-transcription model. It is preferred over a general Live model because the
-assignment's core feature is speech recognition, not a conversational agent.
-The browser uses the model through a `TranscriptionProvider` abstraction so a
-self-hosted provider can be added later without coupling UI components to a
-vendor SDK.
-
-## Trade-offs and known limitations
-
-- The initial release targets Gemini Live; a self-hosted speech engine is
-  optional follow-up work.
-- The recorder and history dashboard are available for recording, searching,
-  reviewing, editing, copying, and deleting saved transcripts.
-- Browser microphone access requires HTTPS, except on localhost during
-  development.
+- Gemini Live is the implemented speech provider; a self-hosted speech engine
+  is not included.
 - Anonymous history is tied to the visitor's browser cookie. Clearing that
   cookie loses access to those records; there is no account-based recovery.
-- Transcripts are retained until the visitor deletes them. Audio is not stored.
-- A Live API session is capped conservatively to avoid abrupt connection
-  termination.
-- Deployment is intentionally deferred until local development is reviewed.
+- Transcripts remain until deleted. The application does not retain raw audio.
+- A Live API session ends after 10 minutes.
+- The hosted free service may sleep when idle; see
+  [DEPLOYMENT.md](./DEPLOYMENT.md) for deployment details and limitations.

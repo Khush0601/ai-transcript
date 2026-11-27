@@ -1,6 +1,5 @@
 import type { LanguageMode, TranscriptionCreate } from '../../api/client'
-
-const STORAGE_KEY = 'speech-to-text.pending-draft'
+import { uiConfig } from '../../config/ui'
 
 export interface PendingDraft {
   client_request_id: string
@@ -24,7 +23,7 @@ export function draftToTranscription(draft: PendingDraft): TranscriptionCreate {
     content,
     duration_ms: draft.duration_ms,
     language_mode: draft.language_mode,
-    provider: 'gemini',
+    provider: uiConfig.providers.gemini.value,
   }
 }
 
@@ -36,36 +35,41 @@ function isPendingDraft(value: unknown): value is PendingDraft {
     typeof draft.title === 'string' &&
     typeof draft.final_text === 'string' &&
     typeof draft.interim_text === 'string' &&
-    (draft.language_mode === 'auto' ||
-      draft.language_mode === 'hindi_english') &&
+    isLanguageMode(draft.language_mode) &&
     typeof draft.duration_ms === 'number' &&
     Number.isFinite(draft.duration_ms) &&
     draft.duration_ms >= 0
   )
 }
 
+function isLanguageMode(value: unknown): value is LanguageMode {
+  return Object.values(uiConfig.recorder.languages).some(
+    (language) => language.value === value,
+  )
+}
+
 export function readPendingDraft():
   { draft: PendingDraft; error: null } | { draft: null; error: string | null } {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = localStorage.getItem(uiConfig.draft.storageKey)
     if (stored === null) return { draft: null, error: null }
     const parsed: unknown = JSON.parse(stored)
     if (isPendingDraft(parsed)) return { draft: parsed, error: null }
     return {
       draft: null,
-      error: 'A saved draft could not be read. It remains in this browser.',
+      error: uiConfig.draft.invalidDraft,
     }
   } catch {
     return {
       draft: null,
-      error: 'Draft storage is unavailable in this browser.',
+      error: uiConfig.draft.storageUnavailable,
     }
   }
 }
 
 export function writePendingDraft(draft: PendingDraft): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
+    localStorage.setItem(uiConfig.draft.storageKey, JSON.stringify(draft))
     return true
   } catch {
     return false
@@ -74,7 +78,7 @@ export function writePendingDraft(draft: PendingDraft): boolean {
 
 export function clearPendingDraft(): boolean {
   try {
-    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(uiConfig.draft.storageKey)
     return true
   } catch {
     return false
