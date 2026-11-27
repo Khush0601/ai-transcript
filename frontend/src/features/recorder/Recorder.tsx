@@ -26,7 +26,7 @@ import {
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiRequestError) {
-    if (error.status === 429) return uiConfig.recorder.messages.rateLimited
+    if (error.status === 429) return error.message
     if (error.status === 503) return uiConfig.recorder.messages.missingApiKey
     return error.message
   }

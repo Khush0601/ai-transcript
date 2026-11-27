@@ -14,6 +14,11 @@ For hosted setup, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 - Save, search, paginate, edit, copy, and delete transcript history.
 - Anonymous browser sessions; each visitor's records are scoped to a
   server-issued cookie.
+- Database-backed quota of 10 recording-token and transcript-write requests
+  per IP in a one-hour window that starts with the first request. The dashboard
+  shows the remaining quota; only a keyed hash of the IP is stored.
+- Security response headers, including anti-framing, MIME-sniffing, and
+  microphone permission restrictions.
 - Raw audio is streamed to Gemini Live and is not stored by this application.
 - A local browser recovery draft helps recover transcript text if saving fails.
 

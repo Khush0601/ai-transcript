@@ -5,9 +5,11 @@ from google import genai
 
 from app.schemas.errors import ErrorResponse
 from app.schemas.stt import SttTokenRequest, SttTokenResponse
+from app.services.rate_limits import enforce_rate_limit
 from app.services.stt_tokens import create_ephemeral_token
 
 router = APIRouter(prefix="/stt", tags=["speech transcription"])
+RateLimitCheck = Annotated[None, Depends(enforce_rate_limit)]
 
 
 def get_gemini_client(request: Request) -> genai.Client:
@@ -35,6 +37,7 @@ GeminiClient = Annotated[genai.Client, Depends(get_gemini_client)]
 )
 async def create_stt_token(
     request: SttTokenRequest,
+    _rate_limit: RateLimitCheck,
     client: GeminiClient,
 ) -> SttTokenResponse:
     return await create_ephemeral_token(client, request)
