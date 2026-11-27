@@ -250,6 +250,7 @@ export const uiConfig = {
       copyTranscript: 'Copy transcript',
       editTranscript: 'Edit transcript',
       deleteTranscript: 'Delete transcript',
+      deleteDialogHeading: 'Delete this transcript?',
       title: 'Title',
       transcript: 'Transcript',
       saving: 'Saving...',
@@ -271,7 +272,7 @@ export const uiConfig = {
       resultRange: (first: number, last: number, total: number) =>
         `${first}-${last} of ${total}`,
       deleteConfirmation: (title: string) =>
-        `Delete "${title}"? This cannot be undone.`,
+        `This will permanently delete "${title}". This action cannot be undone.`,
       characterCount: (count: string, maximum: number) =>
         `${count} / ${maximum.toLocaleString('en-US')} characters`,
       saveFailed: 'Could not save changes:',

@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   deleteTranscription,
@@ -73,6 +73,9 @@ export function TranscriptionHistory({
     null,
   )
   const [copyMessage, setCopyMessage] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] =
+    useState<TranscriptionResponse | null>(null)
+  const deleteDialogRef = useRef<HTMLDialogElement>(null)
 
   const listQuery = useQuery({
     queryKey: [
@@ -136,6 +139,16 @@ export function TranscriptionHistory({
     return () => window.clearTimeout(timeoutId)
   }, [searchInput])
 
+  useEffect(() => {
+    const dialog = deleteDialogRef.current
+    if (!dialog) return
+    if (pendingDelete && !dialog.open) {
+      dialog.showModal()
+    } else if (!pendingDelete && dialog.open) {
+      dialog.close()
+    }
+  }, [pendingDelete])
+
   const data = listQuery.data
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1
   const firstResult = data?.total ? (data.page - 1) * data.limit + 1 : 0
@@ -195,12 +208,15 @@ export function TranscriptionHistory({
 
   function confirmDelete(): void {
     if (!transcription) return
-    const confirmed = window.confirm(
-      uiConfig.history.messages.deleteConfirmation(transcription.title),
-    )
-    if (!confirmed) return
     deleteMutation.reset()
-    deleteMutation.mutate(transcription.id)
+    setPendingDelete(transcription)
+  }
+
+  function deletePendingTranscript(): void {
+    if (!pendingDelete || deleteMutation.isPending) return
+    const transcriptionId = pendingDelete.id
+    setPendingDelete(null)
+    deleteMutation.mutate(transcriptionId)
   }
 
   async function copyTranscript(): Promise<void> {
@@ -708,6 +724,63 @@ export function TranscriptionHistory({
           ) : null}
         </section>
       </div>
+
+      <dialog
+        ref={deleteDialogRef}
+        className="fixed inset-0 m-auto max-h-[calc(100%-2rem)] w-[calc(100%-2rem)] max-w-md rounded-2xl border border-line bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/75"
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+        onCancel={(event) => {
+          event.preventDefault()
+          setPendingDelete(null)
+        }}
+        onClose={() => setPendingDelete(null)}
+      >
+        <div className="p-6 sm:p-7">
+          <div className="mb-5 grid size-11 place-items-center rounded-full border border-brand/40 bg-brand/10 text-brand">
+            <svg
+              className="size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.8]"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M12 8v5m0 3h.01M10.3 3.9 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3l-7.5-13.1a2 2 0 0 0-3.4 0Z" />
+            </svg>
+          </div>
+          <h2
+            id="delete-dialog-title"
+            className="text-xl font-semibold tracking-tight text-white"
+          >
+            {uiConfig.history.labels.deleteDialogHeading}
+          </h2>
+          <p
+            id="delete-dialog-description"
+            className="mt-2 break-words text-sm leading-6 text-zinc-400"
+          >
+            {pendingDelete
+              ? uiConfig.history.messages.deleteConfirmation(
+                  pendingDelete.title,
+                )
+              : ''}
+          </p>
+          <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              autoFocus
+              className="min-h-11 rounded-lg border border-line px-4 text-sm font-medium text-zinc-300 transition hover:bg-surface-raised hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              onClick={() => setPendingDelete(null)}
+            >
+              {uiConfig.history.labels.cancel}
+            </button>
+            <button
+              type="button"
+              className="min-h-11 rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+              onClick={deletePendingTranscript}
+            >
+              {uiConfig.history.labels.deleteTranscript}
+            </button>
+          </div>
+        </div>
+      </dialog>
     </section>
   )
 }
