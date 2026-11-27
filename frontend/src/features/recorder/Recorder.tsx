@@ -7,6 +7,7 @@ import {
   type LanguageMode,
   type TranscriptionCreate,
 } from '../../api/client'
+import { uiConfig, type RecorderStatus } from '../../config/ui'
 import { createAudioCapture, type AudioCapture } from '../../audio/capture'
 import type { GeminiProvider } from '../../providers/gemini-provider'
 import type { ProviderState } from '../../providers/types'
@@ -24,59 +25,42 @@ import {
 } from './transcript'
 import './Recorder.css'
 
-type RecorderStatus =
-  | 'idle'
-  | 'requesting_mic'
-  | 'connecting'
-  | 'recording'
-  | 'stopping'
-  | 'saving'
-  | 'saved'
-  | 'error'
-  | 'save_failed'
-  | 'draft'
-
-const SESSION_LIMIT_MS = 10 * 60 * 1000
-const SESSION_WARNING_MS = 9 * 60 * 1000
-
 function errorMessage(error: unknown): string {
   if (error instanceof ApiRequestError) {
-    if (error.status === 429)
-      return 'Gemini is rate limited or out of quota. Try again later.'
-    if (error.status === 503)
-      return 'Add a Gemini API key to the server environment to enable recording.'
+    if (error.status === 429) return uiConfig.recorder.messages.rateLimited
+    if (error.status === 503) return uiConfig.recorder.messages.missingApiKey
     return error.message
   }
   if (error instanceof DOMException) {
     if (error.name === 'NotAllowedError' || error.name === 'SecurityError') {
-      return 'Microphone access was denied. Allow microphone access in your browser and try again.'
+      return uiConfig.recorder.messages.microphoneDenied
     }
     if (
       error.name === 'NotFoundError' ||
       error.name === 'DevicesNotFoundError'
     ) {
-      return 'No microphone was found. Connect a microphone and try again.'
+      return uiConfig.recorder.messages.microphoneNotFound
     }
     if (error.name === 'NotReadableError') {
-      return 'The microphone is busy or unavailable. Close other apps using it and try again.'
+      return uiConfig.recorder.messages.microphoneUnavailable
     }
   }
   return error instanceof Error
     ? error.message
-    : 'Something went wrong while recording.'
+    : uiConfig.recorder.messages.recordingFailed
 }
 
 function formatDuration(milliseconds: number): string {
   const totalSeconds = Math.floor(milliseconds / 1000)
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  return `${String(minutes).padStart(2, '0')}${uiConfig.recorder.clockSeparator}${String(seconds).padStart(2, '0')}`
 }
 
 function createDraft(languageMode: LanguageMode): PendingDraft {
   return {
     client_request_id: crypto.randomUUID(),
-    title: 'Untitled transcription',
+    title: uiConfig.recorder.defaultTitle,
     final_text: '',
     interim_text: '',
     language_mode: languageMode,
@@ -89,7 +73,9 @@ export function Recorder() {
   const [status, setStatus] = useState<RecorderStatus>('idle')
   const [connectionState, setConnectionState] =
     useState<ProviderState>('closed')
-  const [languageMode, setLanguageMode] = useState<LanguageMode>('auto')
+  const [languageMode, setLanguageMode] = useState<LanguageMode>(
+    uiConfig.recorder.defaultLanguageMode,
+  )
   const [transcript, setTranscript] = useState<TranscriptUpdate>({
     finalText: '',
     interimText: '',
@@ -134,15 +120,13 @@ export function Recorder() {
     }
     draftRef.current = updatedDraft
     if (!writePendingDraft(updatedDraft)) {
-      setStorageWarning(
-        'This browser could not preserve the unsaved transcript locally.',
-      )
+      setStorageWarning(uiConfig.recorder.messages.draftStorageFailed)
     }
   }
 
   async function saveTranscript(payload: TranscriptionCreate): Promise<void> {
     if (!payload.content.trim()) {
-      setError('There are no finalized words to save yet.')
+      setError(uiConfig.recorder.messages.noFinalizedWords)
       setStatus('error')
       return
     }
@@ -159,7 +143,7 @@ export function Recorder() {
       setRecoveryDraft(null)
       if (!clearPendingDraft()) {
         setStorageWarning(
-          'The transcript was saved, but its local recovery copy could not be cleared.',
+          uiConfig.recorder.messages.recoveryCopyCouldNotBeCleared,
         )
       }
       setStatus('saved')
@@ -183,7 +167,7 @@ export function Recorder() {
       if (capture) {
         const remainingChunks = await capture.stop()
         durationMs = Math.min(
-          SESSION_LIMIT_MS,
+          uiConfig.recorder.sessionLimitMs,
           Math.max(
             elapsedMs,
             recordingStartedAt === null ? 0 : Date.now() - recordingStartedAt,
@@ -195,7 +179,7 @@ export function Recorder() {
         }
       } else {
         durationMs = Math.min(
-          SESSION_LIMIT_MS,
+          uiConfig.recorder.sessionLimitMs,
           Math.max(
             elapsedMs,
             recordingStartedAt === null ? 0 : Date.now() - recordingStartedAt,
@@ -233,9 +217,7 @@ export function Recorder() {
       }
       draftRef.current = completedDraft
       if (!writePendingDraft(completedDraft)) {
-        setStorageWarning(
-          'This browser could not preserve the unsaved transcript locally.',
-        )
+        setStorageWarning(uiConfig.recorder.messages.draftStorageFailed)
       }
     }
     stoppingRef.current = false
@@ -306,9 +288,7 @@ export function Recorder() {
       draftRef.current = newDraft
       updateTranscript({ finalText: '', interimText: '' })
       if (!writePendingDraft(newDraft)) {
-        setStorageWarning(
-          'This browser could not preserve the unsaved transcript locally.',
-        )
+        setStorageWarning(uiConfig.recorder.messages.draftStorageFailed)
       }
       await capture.start(
         (chunk) => provider?.sendAudioChunk(chunk),
@@ -333,9 +313,7 @@ export function Recorder() {
         try {
           await capture.stop()
         } catch {
-          setStorageWarning(
-            'The microphone could not be released cleanly. Check browser permissions.',
-          )
+          setStorageWarning(uiConfig.recorder.messages.microphoneReleaseFailed)
         }
       }
       const currentDraft = draftRef.current
@@ -368,7 +346,8 @@ export function Recorder() {
   }
 
   function discardDraft(): void {
-    if (!window.confirm('Discard this unsaved transcript draft?')) return
+    if (!window.confirm(uiConfig.recorder.messages.discardDraftConfirmation))
+      return
     clearPendingDraft()
     draftRef.current = null
     pendingSaveRef.current = null
@@ -392,7 +371,7 @@ export function Recorder() {
       if (!recordingActiveRef.current || startedAt === null) return
       const duration = Date.now() - startedAt
       setElapsedMs(duration)
-      if (duration >= SESSION_LIMIT_MS) {
+      if (duration >= uiConfig.recorder.sessionLimitMs) {
         void stopRecordingRef.current()
       }
     }, 250)
@@ -421,42 +400,42 @@ export function Recorder() {
     status === 'stopping' ||
     status === 'saving'
   const fullTranscript = transcriptText(transcript)
-  const nearSessionLimit = elapsedMs >= SESSION_WARNING_MS
+  const nearSessionLimit = elapsedMs >= uiConfig.recorder.sessionWarningMs
 
   return (
     <section className="recorder-card" aria-labelledby="recorder-heading">
       <div className="recorder-topline">
         <div>
-          <p className="eyebrow">LIVE SPEECH CAPTURE</p>
-          <h2 id="recorder-heading">Your voice, in text.</h2>
+          <p className="eyebrow">{uiConfig.recorder.labels.eyebrow}</p>
+          <h2 id="recorder-heading">{uiConfig.recorder.labels.heading}</h2>
         </div>
         <div className={`connection-pill connection-${connectionState}`}>
           <span aria-hidden="true" />
-          {connectionState === 'connected'
-            ? 'Connected'
-            : connectionState === 'connecting'
-              ? 'Connecting'
-              : connectionState === 'error'
-                ? 'Connection lost'
-                : 'Ready'}
+          {uiConfig.recorder.connectionStateLabels[connectionState]}
         </div>
       </div>
 
       <div className="recorder-controls">
         <label className="language-control">
-          <span>Language</span>
+          <span>{uiConfig.recorder.labels.language}</span>
           <select
             value={languageMode}
             onChange={(event) => {
               const value = event.currentTarget.value
-              if (value === 'auto' || value === 'hindi_english') {
-                setLanguageMode(value)
+              const language = Object.values(uiConfig.recorder.languages).find(
+                (option) => option.value === value,
+              )
+              if (language) {
+                setLanguageMode(language.value)
               }
             }}
             disabled={isBusy || isActive || recoveryDraft !== null}
           >
-            <option value="auto">Auto detect</option>
-            <option value="hindi_english">Hindi + English</option>
+            {Object.values(uiConfig.recorder.languages).map((language) => (
+              <option key={language.value} value={language.value}>
+                {language.label}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -477,7 +456,7 @@ export function Recorder() {
             disabled={status === 'stopping' || status === 'saving'}
           >
             <span className="stop-square" aria-hidden="true" />
-            Stop &amp; save
+            {uiConfig.recorder.labels.stopAndSave}
           </button>
         ) : (
           <button
@@ -491,18 +470,17 @@ export function Recorder() {
               <path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8" />
             </svg>
             {status === 'requesting_mic'
-              ? 'Allow microphone…'
+              ? uiConfig.recorder.labels.allowMicrophone
               : status === 'connecting'
-                ? 'Connecting…'
-                : 'Start recording'}
+                ? uiConfig.recorder.labels.connecting
+                : uiConfig.recorder.labels.startRecording}
           </button>
         )}
       </div>
 
       {nearSessionLimit && isActive && (
         <p className="session-warning" role="status">
-          This session will stop and save at 10 minutes to protect your
-          transcript.
+          {uiConfig.recorder.labels.sessionLimitWarning}
         </p>
       )}
 
@@ -520,11 +498,8 @@ export function Recorder() {
       {recoveryDraft && (
         <div className="draft-recovery" role="status">
           <div>
-            <strong>Unsaved transcript found</strong>
-            <p>
-              Restore it to review or retry saving. It stays in this browser
-              until saved or discarded.
-            </p>
+            <strong>{uiConfig.recorder.labels.unsavedDraftFound}</strong>
+            <p>{uiConfig.recorder.labels.restoreDraftDescription}</p>
           </div>
           <div className="draft-actions">
             <button
@@ -532,14 +507,14 @@ export function Recorder() {
               className="secondary-button"
               onClick={restoreDraft}
             >
-              Restore draft
+              {uiConfig.recorder.labels.restoreDraft}
             </button>
             <button
               type="button"
               className="text-button"
               onClick={discardDraft}
             >
-              Discard
+              {uiConfig.recorder.labels.discard}
             </button>
           </div>
         </div>
@@ -548,7 +523,7 @@ export function Recorder() {
       <div
         className="transcript-panel"
         aria-live="polite"
-        aria-label="Live transcript"
+        aria-label={uiConfig.recorder.labels.liveTranscript}
       >
         {fullTranscript ? (
           <p className="transcript-text">
@@ -571,39 +546,21 @@ export function Recorder() {
               <i />
               <i />
             </span>
-            <p>Your transcript will appear here as you speak.</p>
-            <span>
-              Interim text is shown in grey; confirmed words stay dark.
-            </span>
+            <p>{uiConfig.recorder.labels.transcriptPlaceholder}</p>
+            <span>{uiConfig.recorder.labels.interimTranscriptHint}</span>
           </div>
         )}
       </div>
 
       <div className="recorder-footer">
-        <span>
-          {status === 'recording'
-            ? 'Listening now'
-            : status === 'connecting'
-              ? 'Preparing secure live connection'
-              : status === 'stopping'
-                ? 'Finalizing the last words…'
-                : status === 'saving'
-                  ? 'Saving transcript…'
-                  : status === 'saved'
-                    ? 'Transcript saved'
-                    : status === 'save_failed'
-                      ? 'Transcript is still on this device'
-                      : status === 'draft'
-                        ? 'Recovered draft is ready to save'
-                        : 'Audio is not stored'}
-        </span>
+        <span>{uiConfig.recorder.statusText[status]}</span>
         {status === 'save_failed' && pendingSave && (
           <button
             type="button"
             className="text-button retry-button"
             onClick={() => void retrySave()}
           >
-            Retry save
+            {uiConfig.recorder.labels.retrySave}
           </button>
         )}
         {status === 'draft' && pendingSave && (
@@ -612,11 +569,13 @@ export function Recorder() {
             className="text-button retry-button"
             onClick={() => void retrySave()}
           >
-            Save recovered transcript
+            {uiConfig.recorder.labels.saveRecoveredTranscript}
           </button>
         )}
         {status === 'saved' && savedId && (
-          <span className="saved-indicator">Saved securely</span>
+          <span className="saved-indicator">
+            {uiConfig.recorder.labels.savedSecurely}
+          </span>
         )}
       </div>
     </section>

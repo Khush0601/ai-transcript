@@ -1,5 +1,8 @@
-export const TARGET_SAMPLE_RATE = 16_000
-export const PCM_CHUNK_FRAMES = TARGET_SAMPLE_RATE / 10
+import { uiConfig } from '../config/ui'
+
+export const TARGET_SAMPLE_RATE = uiConfig.audio.sampleRateHz
+export const PCM_CHUNK_FRAMES =
+  (TARGET_SAMPLE_RATE * uiConfig.audio.chunkDurationMs) / 1000
 
 export function floatSamplesToPcm16(samples: Float32Array): Int16Array {
   const pcm = new Int16Array(samples.length)
@@ -34,7 +37,7 @@ export class Pcm16kChunker {
 
   constructor(inputSampleRate: number) {
     if (!Number.isFinite(inputSampleRate) || inputSampleRate <= 0) {
-      throw new RangeError('The input sample rate must be a positive number.')
+      throw new RangeError(uiConfig.errors.inputSampleRateInvalid)
     }
     this.inputStep = inputSampleRate / TARGET_SAMPLE_RATE
   }
