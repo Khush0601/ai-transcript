@@ -23,7 +23,6 @@ import {
   transcriptText,
   type TranscriptUpdate,
 } from './transcript'
-import './Recorder.css'
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiRequestError) {
@@ -401,24 +400,56 @@ export function Recorder() {
     status === 'saving'
   const fullTranscript = transcriptText(transcript)
   const nearSessionLimit = elapsedMs >= uiConfig.recorder.sessionWarningMs
+  const connectionTone =
+    connectionState === 'connected'
+      ? 'border-emerald-500/30 text-emerald-300'
+      : connectionState === 'error'
+        ? 'border-brand/40 text-red-300'
+        : connectionState === 'connecting' || connectionState === 'stopping'
+          ? 'border-amber-500/30 text-amber-300'
+          : 'border-line text-muted'
+  const connectionDotTone =
+    connectionState === 'connected'
+      ? 'bg-emerald-500'
+      : connectionState === 'error'
+        ? 'bg-brand'
+        : connectionState === 'connecting' || connectionState === 'stopping'
+          ? 'bg-amber-400'
+          : 'bg-zinc-600'
 
   return (
-    <section className="recorder-card" aria-labelledby="recorder-heading">
-      <div className="recorder-topline">
+    <section
+      className="mx-auto max-w-5xl rounded-2xl border border-line bg-surface p-5 shadow-2xl shadow-black/50 sm:p-8"
+      aria-labelledby="recorder-heading"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="eyebrow">{uiConfig.recorder.labels.eyebrow}</p>
-          <h2 id="recorder-heading">{uiConfig.recorder.labels.heading}</h2>
+          <p className="mb-2 text-[0.65rem] font-semibold tracking-[0.22em] text-brand">
+            {uiConfig.recorder.labels.eyebrow}
+          </p>
+          <h2
+            id="recorder-heading"
+            className="text-2xl font-semibold tracking-tight text-white"
+          >
+            {uiConfig.recorder.labels.heading}
+          </h2>
         </div>
-        <div className={`connection-pill connection-${connectionState}`}>
-          <span aria-hidden="true" />
+        <div
+          className={`inline-flex w-fit flex-none items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium ${connectionTone}`}
+        >
+          <span
+            className={`size-2 rounded-full ${connectionDotTone}`}
+            aria-hidden="true"
+          />
           {uiConfig.recorder.connectionStateLabels[connectionState]}
         </div>
       </div>
 
-      <div className="recorder-controls">
-        <label className="language-control">
+      <div className="mt-7 grid grid-cols-2 items-end gap-4 sm:grid-cols-[minmax(0,1fr)_auto_minmax(10rem,1fr)]">
+        <label className="col-span-2 grid gap-2 text-xs font-medium uppercase tracking-wide text-zinc-400 sm:col-span-1">
           <span>{uiConfig.recorder.labels.language}</span>
           <select
+            className="min-h-12 w-full rounded-lg border border-line bg-black px-3 text-sm normal-case tracking-normal text-ink outline-none transition focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50"
             value={languageMode}
             onChange={(event) => {
               const value = event.currentTarget.value
@@ -439,33 +470,41 @@ export function Recorder() {
           </select>
         </label>
 
-        <div className="recording-clock" aria-live="off">
+        <div
+          className="col-span-1 flex min-h-12 items-center gap-2 text-base font-semibold tabular-nums text-zinc-300"
+          aria-live="off"
+        >
           <span
-            className={
-              isActive ? 'recording-dot recording-dot-active' : 'recording-dot'
-            }
+            className={`size-2 rounded-full ${isActive ? 'animate-pulse bg-brand' : 'bg-zinc-600'}`}
           />
           {formatDuration(elapsedMs)}
         </div>
 
         {isActive ? (
           <button
-            className="record-button stop-button"
+            className="col-span-1 inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-brand/40 bg-brand/10 px-4 text-sm font-semibold text-red-300 transition hover:bg-brand/20 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:col-span-1"
             type="button"
             onClick={() => void stopRecording()}
             disabled={status === 'stopping' || status === 'saving'}
           >
-            <span className="stop-square" aria-hidden="true" />
+            <span
+              className="size-2.5 rounded-sm bg-current"
+              aria-hidden="true"
+            />
             {uiConfig.recorder.labels.stopAndSave}
           </button>
         ) : (
           <button
-            className="record-button"
+            className="col-span-1 inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-brand px-4 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:col-span-1"
             type="button"
             onClick={() => void startRecording()}
             disabled={isBusy || pendingSave !== null || recoveryDraft !== null}
           >
-            <svg className="mic-symbol" viewBox="0 0 24 24" aria-hidden="true">
+            <svg
+              className="size-5 fill-none stroke-current [stroke-linecap:round] [stroke-linejoin:round] [stroke-width:1.8]"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
               <rect x="9" y="3" width="6" height="12" rx="3" />
               <path d="M5 11a7 7 0 0 0 14 0M12 18v3m-4 0h8" />
             </svg>
@@ -479,39 +518,53 @@ export function Recorder() {
       </div>
 
       {nearSessionLimit && isActive && (
-        <p className="session-warning" role="status">
+        <p
+          className="mt-4 rounded-lg border border-amber-500/30 bg-amber-950/30 px-4 py-3 text-sm leading-6 text-amber-200"
+          role="status"
+        >
           {uiConfig.recorder.labels.sessionLimitWarning}
         </p>
       )}
 
       {error && (
-        <p className="notice notice-error" role="alert">
+        <p
+          className="mt-4 rounded-lg border border-brand/30 bg-red-950/30 px-4 py-3 text-sm leading-6 text-red-200"
+          role="alert"
+        >
           {error}
         </p>
       )}
       {storageWarning && (
-        <p className="notice notice-warning" role="status">
+        <p
+          className="mt-4 rounded-lg border border-amber-500/30 bg-amber-950/30 px-4 py-3 text-sm leading-6 text-amber-200"
+          role="status"
+        >
           {storageWarning}
         </p>
       )}
 
       {recoveryDraft && (
-        <div className="draft-recovery" role="status">
+        <div
+          className="mt-4 flex flex-col gap-4 rounded-xl border border-line bg-surface-raised p-4 text-sm text-zinc-200 sm:flex-row sm:items-center sm:justify-between"
+          role="status"
+        >
           <div>
             <strong>{uiConfig.recorder.labels.unsavedDraftFound}</strong>
-            <p>{uiConfig.recorder.labels.restoreDraftDescription}</p>
+            <p className="mt-1 text-sm leading-6 text-muted">
+              {uiConfig.recorder.labels.restoreDraftDescription}
+            </p>
           </div>
-          <div className="draft-actions">
+          <div className="flex w-full flex-none items-center justify-between gap-3 sm:w-auto">
             <button
               type="button"
-              className="secondary-button"
+              className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               onClick={restoreDraft}
             >
               {uiConfig.recorder.labels.restoreDraft}
             </button>
             <button
               type="button"
-              className="text-button"
+              className="px-2 py-2 text-sm font-medium text-zinc-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               onClick={discardDraft}
             >
               {uiConfig.recorder.labels.discard}
@@ -521,15 +574,15 @@ export function Recorder() {
       )}
 
       <div
-        className="transcript-panel"
+        className="mt-5 min-h-60 rounded-xl border border-line bg-black p-5 sm:p-6"
         aria-live="polite"
         aria-label={uiConfig.recorder.labels.liveTranscript}
       >
         {fullTranscript ? (
-          <p className="transcript-text">
+          <p className="m-0 whitespace-pre-wrap break-words text-base leading-8 text-zinc-100">
             {transcript.finalText}
             {transcript.interimText && (
-              <span className="transcript-interim">
+              <span className="text-zinc-500">
                 {transcript.finalText && !/\s$/.test(transcript.finalText)
                   ? ' '
                   : ''}
@@ -538,26 +591,30 @@ export function Recorder() {
             )}
           </p>
         ) : (
-          <div className="transcript-placeholder">
-            <span className="sound-bars" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-              <i />
-              <i />
+          <div className="flex min-h-52 flex-col items-center justify-center text-center">
+            <span className="flex h-7 items-center gap-1" aria-hidden="true">
+              <i className="h-2 w-1 rounded-full bg-brand/60" />
+              <i className="h-4 w-1 rounded-full bg-brand/80" />
+              <i className="h-6 w-1 rounded-full bg-brand" />
+              <i className="h-4 w-1 rounded-full bg-brand/80" />
+              <i className="h-2 w-1 rounded-full bg-brand/60" />
             </span>
-            <p>{uiConfig.recorder.labels.transcriptPlaceholder}</p>
-            <span>{uiConfig.recorder.labels.interimTranscriptHint}</span>
+            <p className="mb-1 mt-4 text-sm text-zinc-400">
+              {uiConfig.recorder.labels.transcriptPlaceholder}
+            </p>
+            <span className="text-xs text-zinc-600">
+              {uiConfig.recorder.labels.interimTranscriptHint}
+            </span>
           </div>
         )}
       </div>
 
-      <div className="recorder-footer">
+      <div className="flex min-h-12 flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
         <span>{uiConfig.recorder.statusText[status]}</span>
         {status === 'save_failed' && pendingSave && (
           <button
             type="button"
-            className="text-button retry-button"
+            className="ml-auto px-2 py-1 font-semibold text-red-400 transition hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             onClick={() => void retrySave()}
           >
             {uiConfig.recorder.labels.retrySave}
@@ -566,14 +623,14 @@ export function Recorder() {
         {status === 'draft' && pendingSave && (
           <button
             type="button"
-            className="text-button retry-button"
+            className="ml-auto px-2 py-1 font-semibold text-red-400 transition hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             onClick={() => void retrySave()}
           >
             {uiConfig.recorder.labels.saveRecoveredTranscript}
           </button>
         )}
         {status === 'saved' && savedId && (
-          <span className="saved-indicator">
+          <span className="font-medium text-emerald-400">
             {uiConfig.recorder.labels.savedSecurely}
           </span>
         )}
