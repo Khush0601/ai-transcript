@@ -143,5 +143,7 @@ async def test_stt_token_route_uses_server_token_service(
         await gemini_client.aio.aclose()
 
     assert response.status_code == 200
+    assert response.headers["x-ratelimit-limit"] == "10"
+    assert response.headers["x-ratelimit-remaining"] == "9"
     assert response.json()["token"] == "single-use-test-token"
     assert response.json()["language_mode"] == "hindi_english"

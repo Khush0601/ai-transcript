@@ -84,6 +84,14 @@ export const uiConfig = {
       items: ['Private by design', 'Audio is never stored'],
       separator: '·',
     },
+    rateLimit: {
+      requestCountLabel: 'requests left in your 1-hour window',
+      unavailable: 'Request quota is unavailable.',
+      loading: 'Checking request quota…',
+      resetLabel: 'Quota resets at',
+      usageHint:
+        'Shared by this IP. Recording starts and transcript saves, edits, and deletes count.',
+    },
   },
   audio: {
     sampleRateHz,
@@ -160,7 +168,6 @@ export const uiConfig = {
       savedSecurely: 'Saved securely',
     },
     messages: {
-      rateLimited: 'Gemini is rate limited or out of quota. Try again later.',
       missingApiKey:
         'Add a Gemini API key to the server environment to enable recording.',
       microphoneDenied:

@@ -1,11 +1,35 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState, useSyncExternalStore } from 'react'
 
 import { Recorder } from './features/recorder/Recorder'
 import { TranscriptionHistory } from './features/history/TranscriptionHistory'
 import { uiConfig, type AppView } from './config/ui'
+import { getRateLimitStatus } from './api/client'
+import { getRateLimitSnapshot, subscribeToRateLimit } from './api/rate-limit'
 
 function App() {
   const [view, setView] = useState<AppView>(uiConfig.app.views.record.value)
+  const rateLimit = useSyncExternalStore(
+    subscribeToRateLimit,
+    getRateLimitSnapshot,
+    getRateLimitSnapshot,
+  )
+  const [rateLimitLoadFailed, setRateLimitLoadFailed] = useState(false)
+  const resetTime =
+    rateLimit?.remaining === 0 && rateLimit.resets_at
+      ? new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(
+          new Date(rateLimit.resets_at),
+        )
+      : null
+
+  useEffect(() => {
+    let active = true
+    void getRateLimitStatus().catch(() => {
+      if (active) setRateLimitLoadFailed(true)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
 
   return (
     <main className="min-h-screen min-w-[320px] bg-canvas px-4 pb-8 pt-4 font-sans text-ink antialiased sm:px-8">
@@ -43,6 +67,25 @@ function App() {
           ))}
         </nav>
       </header>
+
+      <div className="mx-auto mb-6 max-w-7xl text-right">
+        <p
+          className="text-sm font-medium text-ink"
+          role="status"
+          aria-live="polite"
+        >
+          {rateLimit
+            ? `${rateLimit.remaining} of ${rateLimit.limit} ${uiConfig.app.rateLimit.requestCountLabel}`
+            : rateLimitLoadFailed
+              ? uiConfig.app.rateLimit.unavailable
+              : uiConfig.app.rateLimit.loading}
+        </p>
+        <p className="mt-1 text-xs text-muted">
+          {resetTime
+            ? `${uiConfig.app.rateLimit.resetLabel} ${resetTime}.`
+            : uiConfig.app.rateLimit.usageHint}
+        </p>
+      </div>
 
       <div hidden={view !== uiConfig.app.views.record.value}>
         <section className="mx-auto mb-10 max-w-7xl text-left">

@@ -31,7 +31,8 @@ only in Render's environment settings.
    `UV_VERSION`, `ENVIRONMENT`, and `GEMINI_LIVE_MODEL`.
 
 4. Deploy the service. The build creates the frontend bundle. On startup,
-   Render applies Alembic migrations and launches FastAPI.
+   Render applies Alembic migrations (including the shared rate-limit table)
+   and launches FastAPI.
 5. Open `https://<your-service>.onrender.com/api/health`, then open
    `https://<your-service>.onrender.com` to use the app.
 
@@ -81,6 +82,12 @@ correct driver option types.
 
 Alembic migrations run on service startup before FastAPI starts. The deployed
 frontend and API share an origin, so there is no frontend API URL to configure.
+The hourly quota is stored in Neon, so it survives restarts and is shared by
+service instances. It counts token requests and transcript create, edit, and
+delete requests; reads and health checks do not consume quota. IP addresses are
+stored as keyed hashes, not in plaintext. Behind Render's reverse proxy, the
+limiter uses the rightmost address in `X-Forwarded-For`; do not expose the
+FastAPI process directly to untrusted clients.
 
 ## Verify the deployment
 

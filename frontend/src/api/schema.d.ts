@@ -21,6 +21,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/rate-limit': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Read Rate Limit */
+    get: operations['read_rate_limit_api_rate_limit_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/stt/token': {
     parameters: {
       query?: never
@@ -97,6 +114,15 @@ export interface components {
        * @constant
        */
       status: 'ok'
+    }
+    /** RateLimitStatus */
+    RateLimitStatus: {
+      /** Limit */
+      limit: number
+      /** Remaining */
+      remaining: number
+      /** Resets At */
+      resets_at: string | null
     }
     /** SttTokenRequest */
     SttTokenRequest: {
@@ -251,6 +277,26 @@ export interface operations {
       }
     }
   }
+  read_rate_limit_api_rate_limit_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RateLimitStatus']
+        }
+      }
+    }
+  }
   create_stt_token_api_stt_token_post: {
     parameters: {
       query?: never
@@ -375,6 +421,15 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ErrorResponse']
+        }
+      }
     }
   }
   read_transcription_api_transcriptions__transcription_id__get: {
@@ -455,6 +510,15 @@ export interface operations {
           'application/json': components['schemas']['ErrorResponse']
         }
       }
+      /** @description Too Many Requests */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ErrorResponse']
+        }
+      }
     }
   }
   patch_transcription_api_transcriptions__transcription_id__patch: {
@@ -492,6 +556,15 @@ export interface operations {
       }
       /** @description Unprocessable Entity */
       422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ErrorResponse']
+        }
+      }
+      /** @description Too Many Requests */
+      429: {
         headers: {
           [name: string]: unknown
         }
