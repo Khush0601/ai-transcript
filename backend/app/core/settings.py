@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     gemini_live_model: str = "gemini-3.5-transcribe-live"
 
+    @property
+    def database_connect_args(self) -> dict[str, int]:
+        if "-pooler." in (make_url(self.database_url).host or ""):
+            return {"statement_cache_size": 0}
+        return {}
+
     @field_validator("database_url")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:
@@ -40,12 +46,12 @@ class Settings(BaseSettings):
         query = dict(url.query)
         sslmode = query.pop("sslmode", None)
         query.pop("channel_binding", None)
+        query.pop("statement_cache_size", None)
         if sslmode is not None:
             query.setdefault("ssl", sslmode)
 
         if "-pooler." in (url.host or ""):
             query.setdefault("prepared_statement_cache_size", "0")
-            query.setdefault("statement_cache_size", "0")
 
         return url.set(query=query).render_as_string(hide_password=False)
 
