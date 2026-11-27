@@ -44,6 +44,10 @@ FastAPI routes delegate to services and repositories. SQLAlchemy 2 async handles
 PostgreSQL access; Alembic manages schema migrations. FastAPI serves the built
 React app and `/api` from the same origin when deployed.
 
+The frontend uses React, TypeScript, Vite, Tailwind CSS, and TanStack Query.
+Its shared visual theme is defined in `frontend/src/index.css`; components use
+Tailwind utility classes rather than feature-specific CSS stylesheets.
+
 The default model is `gemini-3.5-transcribe-live`, a dedicated transcription
 model selected for this speech-recognition app. The browser only receives a
 constrained ephemeral token. Each recording is capped at 10 minutes.

@@ -154,7 +154,7 @@ export const uiConfig = {
       liveTranscript: 'Live transcript',
       transcriptPlaceholder: 'Your transcript will appear here as you speak.',
       interimTranscriptHint:
-        'Interim text is shown in grey; confirmed words stay dark.',
+        'Interim text is shown in grey; confirmed words stay bright.',
       retrySave: 'Retry save',
       saveRecoveredTranscript: 'Save recovered transcript',
       savedSecurely: 'Saved securely',
